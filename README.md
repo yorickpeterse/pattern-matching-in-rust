@@ -9,7 +9,7 @@ can be difficult to read.
 
 | Name                                          | Paper                        | Directory
 |:----------------------------------------------|:-----------------------------|:-----------
-| ML pattern compilation and partial evaluation | [PDF](https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.48.1363) | [sestoft1996][sestoft1996/] |
+| ML pattern compilation and partial evaluation | [PDF](https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.48.1363) | [sestoft1996](./sestoft1996/) |
 
 ## Requirements
 
