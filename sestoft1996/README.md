@@ -2,12 +2,7 @@
 
 This directory contains an implementation of the pattern matching algorithm
 introduced in the paper "ML Pattern match compilation and partial evaluation" by
-Peter Sestoft, from 1996 (I think). I ended up implementing this algorithm while
-investigating potential pattern matching/exhaustiveness checking algorithms for
-[Inko](https://inko-lang.org/). As there's not much information on this
-algorithm (and certainly very little reference code), and the paper is a bit of
-a pain to read, I'm publishing the code here so others hopefully don't have to
-go through as much trouble understanding the algorithm as I had to.
+Peter Sestoft, from 1996.
 
 ## A short rant about the paper
 
@@ -68,8 +63,8 @@ Some differences from the paper:
 - When generating `Sel` nodes, the paper uses `i+1` to build the selector
   values. It's not clear why this is done (the paper makes no mention of it),
   and it seems unnecessary. As such we just use indexes starting at zero.
-- The paper implements various functions in an inexhaustive manner, without any
-  explanation as to why. My implementation uses exhaustive patterns where
+- The paper implements various functions in an non-exhaustive manner, without
+  any explanation as to why. My implementation uses exhaustive patterns where
   possible, and `unwrap()` in a few places where missing values (and thus
   panics) shouldn't occur in the absence of bugs (famous last words).
 

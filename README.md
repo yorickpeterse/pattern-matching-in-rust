@@ -5,11 +5,39 @@ in Rust. The goal of these implementations it to (hopefully) make it easier to
 understand them, as papers related to pattern matching (and papers in general)
 can be difficult to read.
 
+## Background
+
+I ended up implementing these algorithms while investigating potential pattern
+matching/exhaustiveness checking algorithms for [Inko](https://inko-lang.org/).
+While there are plenty of papers on the subject, few of them include reference
+code, and almost all of them are really dense and difficult to read. I hope the
+code published in this repository is of use to those wishing to implement
+pattern matching/exhaustiveness.
+
 ## Algorithms
 
 | Name                                          | Paper                        | Directory
 |:----------------------------------------------|:-----------------------------|:-----------
 | ML pattern compilation and partial evaluation | [PDF](https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.48.1363) | [sestoft1996](./sestoft1996/) |
+
+Other papers I've come across (but don't necessarily want to implement):
+
+- [A generic algorithm for checking exhaustivity of pattern
+  matching](https://dl.acm.org/doi/10.1145/2998392.2998401). This one has a
+  Scala implementation that [is found
+  here](https://github.com/lampepfl/dotty/pull/1364) (the `Space.scala` file).
+- [Compiling pattern matching to good decision
+  trees](https://www.cs.tufts.edu/comp/150FP/archive/luc-maranget/jun08.pdf).
+  This is about just compiling pattern matching into a decision tree, not about
+  exhaustiveness checking. If you don't know how to read the computer science
+  hieroglyphs (like me), this paper is basically impossible to understand.
+- [Warnings for pattern
+  matching](http://pauillac.inria.fr/~maranget/papers/warn/warn.pdf). This is
+  just about producing warnings/errors for e.g. non-exhaustive patterns.
+  Similarly painful to understand as the previous paper (i.e. I gave up).
+- [The Implementation of Functional Programming
+  Languages](https://www.microsoft.com/en-us/research/publication/the-implementation-of-functional-programming-languages/).
+  This book has a chapter on pattern matching, but I gave up on it.
 
 ## Requirements
 
