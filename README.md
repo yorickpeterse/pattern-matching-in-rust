@@ -38,6 +38,13 @@ Other papers I've come across (but don't necessarily want to implement):
 - [The Implementation of Functional Programming
   Languages](https://www.microsoft.com/en-us/research/publication/the-implementation-of-functional-programming-languages/).
   This book has a chapter on pattern matching, but I gave up on it.
+- [How to compile pattern
+  matching](https://julesjacobs.com/notes/patternmatching/patternmatching.pdf)
+  provides an algorithm somewhat different from the existing literature.
+  Unfortunately, the provided Scala implementation doesn't do proper
+  exhaustiveness checking. I contacted the author and while they did provide a
+  version that did some degree of exhaustiveness checking, I never managed to
+  properly understand it or the algorithm as a whole.
 
 ## Requirements
 
