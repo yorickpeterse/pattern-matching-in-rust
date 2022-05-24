@@ -81,7 +81,7 @@ impl<T: Eq + PartialEq> List<T> {
     }
 }
 
-impl<T: Clone + std::fmt::Debug> List<T> {
+impl<T: Clone> List<T> {
     /// Merges `self` and `other`.
     fn merge(&self, other: List<T>) -> List<T> {
         let mut new_list = List::new();
@@ -1033,6 +1033,84 @@ mod tests {
                 if_eq(sel(1, obj()), tt_con(), success("foo"), success("bar")),
                 if_eq(sel(1, obj()), ff_con(), success("baz"), success("quix"))
             )
+        );
+    }
+
+    #[test]
+    fn test_match_with_args() {
+        let some = con("some", 3, 2);
+        let (result, _) = compile(list![
+            (Pattern::Cons(some.clone(), list![tt(), tt(), ff()]), rhs("foo")),
+            (var("x"), rhs("bar"))
+        ]);
+
+        assert_eq!(
+            result,
+            if_eq(
+                obj(),
+                some,
+                if_eq(
+                    sel(0, obj()),
+                    tt_con(),
+                    if_eq(
+                        sel(1, obj()),
+                        tt_con(),
+                        if_eq(
+                            sel(2, obj()),
+                            ff_con(),
+                            success("foo"),
+                            success("bar")
+                        ),
+                        success("bar")
+                    ),
+                    success("bar")
+                ),
+                success("bar")
+            )
+        );
+    }
+
+    #[test]
+    fn test_match_nonexhaustive_with_args() {
+        let some = con("some", 3, 2);
+        let (result, diags) = compile(list![(
+            Pattern::Cons(some.clone(), list![tt(), ff(), ff()]),
+            rhs("foo")
+        ),]);
+
+        assert_eq!(
+            result,
+            if_eq(
+                obj(),
+                some,
+                if_eq(
+                    sel(0, obj()),
+                    tt_con(),
+                    if_eq(
+                        sel(1, obj()),
+                        ff_con(),
+                        if_eq(
+                            sel(2, obj()),
+                            ff_con(),
+                            success("foo"),
+                            failure()
+                        ),
+                        failure()
+                    ),
+                    failure()
+                ),
+                failure()
+            )
+        );
+
+        assert_eq!(
+            diags.messages,
+            vec![
+                "Missing pattern: some(true, false, _)".to_string(),
+                "Missing pattern: some(true, _, _)".to_string(),
+                "Missing pattern: some(_, _, _)".to_string(),
+                "Missing pattern: _".to_string(),
+            ]
         );
     }
 }
