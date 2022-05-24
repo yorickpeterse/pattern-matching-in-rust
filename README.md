@@ -23,9 +23,10 @@ pattern matching/exhaustiveness.
 Other papers I've come across (but don't necessarily want to implement):
 
 - [A generic algorithm for checking exhaustivity of pattern
-  matching](https://dl.acm.org/doi/10.1145/2998392.2998401). This one has a
-  Scala implementation that [is found
-  here](https://github.com/lampepfl/dotty/pull/1364) (the `Space.scala` file).
+  matching](https://dl.acm.org/doi/10.1145/2998392.2998401).
+  - The Scala implementation [is found in this PR](https://github.com/lampepfl/dotty/pull/1364) (the `Space.scala` file).
+  - Swift also uses this algorithm [here](https://github.com/apple/swift/blob/3c0b1ab03f189e044303436b8aa6a27c2f93707d/lib/Sema/TypeCheckSwitchStmt.cpp)
+  - Some Reddit comments about the algorithm are [found here](https://www.reddit.com/r/ProgrammingLanguages/comments/cioxwn/a_generic_algorithm_for_checking_exhaustivity_of/)
 - [Compiling pattern matching to good decision
   trees](https://www.cs.tufts.edu/comp/150FP/archive/luc-maranget/jun08.pdf).
   This is about just compiling pattern matching into a decision tree, not about
