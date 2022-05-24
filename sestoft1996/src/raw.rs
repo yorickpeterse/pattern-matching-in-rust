@@ -14,6 +14,7 @@
 //
 // The Moscow ML compiler uses hash consing and a DAG as discussed in section
 // 7.5 of the paper.
+use std::collections::HashSet;
 use std::fmt;
 use std::rc::Rc;
 
@@ -27,12 +28,13 @@ use std::rc::Rc;
 ///
 /// Like the rest of this implementation we're focusing on keeping things as
 /// simple as is reasonable, rather than making the implementation efficient.
+#[derive(Eq, PartialEq)]
 struct Node<T> {
     value: T,
     next: Option<Rc<Node<T>>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct List<T> {
     head: Option<Rc<Node<T>>>,
     len: usize,
@@ -128,6 +130,25 @@ impl<'a, T> Iterator for ListIter<'a, T> {
     }
 }
 
+/// The type used for storing diagnostic messages.
+pub struct Diagnostics {
+    /// The diagnostic messages produced.
+    ///
+    /// In a real compiler this would include more than just a message, such as
+    /// the line and numbers.
+    messages: Vec<String>,
+
+    /// The right-hand values (= the code you'd run upon a match) that have been
+    /// processes.
+    ///
+    /// If a value isn't included in this set it means it and its pattern are
+    /// redundant.
+    ///
+    /// In a real compiler you'd probably mark AST nodes directly. In our case
+    /// the right-hand values are just simple strings, so we use a set instead.
+    reachable: HashSet<RHS>,
+}
+
 /// The `con` (= constructor) type in the paper.
 ///
 /// For a boolean, a constructor would have the following values:
@@ -185,6 +206,42 @@ pub enum TermDesc {
     Neg(List<Con>),
 }
 
+impl TermDesc {
+    /// Returns a string used to describe this term in an error message.
+    ///
+    /// In a real compiler you'd do the following:
+    ///
+    /// For a Pos, just display the pattern/type/whatever name
+    ///
+    /// For a Neg(list), obtain all possible values from the constructor, ignore
+    /// those in "list", then produce a name using the remaining values. So if
+    /// "list" is `[red]`, and the possible values are `[red, green, blue]`, the
+    /// returned string could be `green | blue`. If this is nested inside a
+    /// `Pos("tuple", ...)` node you'd end up with something like
+    /// `tuple(green | blue)`.
+    ///
+    /// For the sake of simplicity we just return `_` for a Neg.
+    fn error_string(&self) -> String {
+        match self {
+            TermDesc::Pos(cons, args) => {
+                if args.is_empty() {
+                    cons.name.clone()
+                } else {
+                    format!(
+                        "{}({})",
+                        cons.name,
+                        args.iter()
+                            .map(|v| v.error_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                }
+            }
+            TermDesc::Neg(_) => "_".to_string(),
+        }
+    }
+}
+
 /// The `access` type in the paper.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Access {
@@ -193,7 +250,7 @@ pub enum Access {
 }
 
 /// The `decision` type in the paper.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Decision {
     /// A pattern didn't match.
     Failure,
@@ -201,15 +258,65 @@ pub enum Decision {
     /// A pattern is matched and the right-hand value is to be returned.
     Success(RHS),
 
-    /// Perform a runtime match of some sort.
+    /// Checks if a constructor matches the value at the given access path.
     ///
     /// The members are as follows:
     ///
-    /// 1. The value to test
+    /// 1. The value to test against
     /// 2. The pattern/value to match against
     /// 3. The path to take upon a match
-    /// 4. The path to take upon a failure.
+    /// 4. The path to take upon a failure
+    ///
+    /// A node like this:
+    ///
+    ///     IfEq(Sel(0, Obj), x, ok, err)
+    ///
+    /// Translates to roughly the following pseudo code:
+    ///
+    ///     if obj.0 is x {
+    ///       ok
+    ///     } else {
+    ///       err
+    ///     }
     IfEq(Access, Con, Box<Decision>, Box<Decision>),
+
+    /// Checks if any of the given constructors match the value at the given
+    /// access path.
+    ///
+    /// The members are as follows:
+    ///
+    /// 1. The value to test against
+    /// 2. The list of constructors to test and their corresponding decisions
+    /// 3. A fallback decision in case no patterns match
+    ///
+    /// The fallback is needed because given a type with a span of N, IfEq nodes
+    /// only test N-1 constructors, as the last possible constructor is
+    /// implicitly assumed in the IfEq node's "else" body. That is, IfEq tests
+    /// are like this:
+    ///
+    ///     if value is green {
+    ///       ...
+    ///     } else {
+    ///       if value is red {
+    ///         ...
+    ///       } else {
+    ///         ..
+    ///       }
+    ///     }
+    ///
+    /// And not like this:
+    ///
+    ///     if value is green {
+    ///       ...
+    ///     } else if value is red {
+    ///       ...
+    ///     } else if value is blue {
+    ///       ...
+    ///     }
+    ///
+    /// A real compiler may have to somehow "lift" the fallback into a
+    /// switch/jump case.
+    Switch(Access, List<(Con, Decision)>, Box<Decision>),
 }
 
 /// The result of the `staticmatch` (or in our case `static_match`) function.
@@ -244,7 +351,7 @@ pub type RHS = String;
 /// The `addneg` function in the paper.
 fn addneg(dsc: TermDesc, con: Con) -> TermDesc {
     match dsc {
-        // The paper introduces this function as an inexhaustive function. The
+        // The paper introduces this function as a non-exhaustive function. The
         // implementation in the Moscow ML compiler just returns the term when
         // it's a Pos, so we do the same.
         TermDesc::Pos(_, _) => dsc,
@@ -374,7 +481,11 @@ fn builddsc(ctx: Context, dsc: TermDesc, work: Work) -> TermDesc {
     }
 }
 
-fn fail(dsc: TermDesc, rules: List<(Pattern, RHS)>) -> Decision {
+fn fail(
+    dsc: TermDesc,
+    rules: List<(Pattern, RHS)>,
+    diags: &mut Diagnostics,
+) -> Decision {
     if let (Some((pat1, rhs1)), rulesr) = rules.split() {
         matches(
             pat1.clone(),
@@ -384,8 +495,10 @@ fn fail(dsc: TermDesc, rules: List<(Pattern, RHS)>) -> Decision {
             List::new(),
             rhs1.clone(),
             rulesr,
+            diags,
         )
     } else {
+        diags.messages.push(format!("Missing pattern: {}", dsc.error_string()));
         Decision::Failure
     }
 }
@@ -395,10 +508,11 @@ fn succeed(
     work: Work,
     rhs: RHS,
     rules: List<(Pattern, RHS)>,
+    diags: &mut Diagnostics,
 ) -> Decision {
     if let (Some((pats, accs, dscs)), workr) = work.split() {
         if pats.is_empty() && accs.is_empty() && dscs.is_empty() {
-            succeed(norm(ctx), workr, rhs, rules)
+            succeed(norm(ctx), workr, rhs, rules, diags)
         } else {
             let (pat1, patr) = pats.split();
             let (obj1, objr) = accs.split();
@@ -412,9 +526,11 @@ fn succeed(
                 workr.add((patr, objr, dscr)),
                 rhs,
                 rules,
+                diags,
             )
         }
     } else {
+        diags.reachable.insert(rhs.clone());
         Decision::Success(rhs)
     }
 }
@@ -429,6 +545,7 @@ fn match_succeed(
     work: Work,
     rhs: RHS,
     rules: List<(Pattern, RHS)>,
+    diags: &mut Diagnostics,
 ) -> Decision {
     let oargs = getoargs(&pcon, obj);
     let dargs = getdargs(&pcon, dsc);
@@ -438,6 +555,7 @@ fn match_succeed(
         work.add((pargs, oargs, dargs)),
         rhs,
         rules,
+        diags,
     )
 }
 
@@ -447,8 +565,9 @@ fn match_fail(
     ctx: Context,
     work: Work,
     rules: List<(Pattern, RHS)>,
+    diags: &mut Diagnostics,
 ) -> Decision {
-    fail(builddsc(ctx, newdsc, work), rules)
+    fail(builddsc(ctx, newdsc, work), rules, diags)
 }
 
 fn matches(
@@ -459,14 +578,15 @@ fn matches(
     work: Work,
     rhs: RHS,
     rules: List<(Pattern, RHS)>,
+    diags: &mut Diagnostics,
 ) -> Decision {
     match pat1 {
-        Pattern::Var(_) => succeed(augment(ctx, dsc), work, rhs, rules),
+        Pattern::Var(_) => succeed(augment(ctx, dsc), work, rhs, rules, diags),
         Pattern::Cons(pcon, pargs) => match staticmatch(&pcon, &dsc) {
-            StaticMatch::Yes => {
-                match_succeed(pcon, pargs, obj, dsc, ctx, work, rhs, rules)
-            }
-            StaticMatch::No => match_fail(dsc, ctx, work, rules),
+            StaticMatch::Yes => match_succeed(
+                pcon, pargs, obj, dsc, ctx, work, rhs, rules, diags,
+            ),
+            StaticMatch::No => match_fail(dsc, ctx, work, rules, diags),
             StaticMatch::Maybe => {
                 // In the paper the equivalent code makes two assumptions that
                 // don't work in Rust:
@@ -494,16 +614,65 @@ fn matches(
                         work.clone(),
                         rhs.clone(),
                         rules.clone(),
+                        diags,
                     )),
-                    Box::new(match_fail(addneg(dsc, pcon), ctx, work, rules)),
+                    Box::new(match_fail(
+                        addneg(dsc, pcon),
+                        ctx,
+                        work,
+                        rules,
+                        diags,
+                    )),
                 )
             }
         },
     }
 }
 
-pub fn compile(rules: List<(Pattern, RHS)>) -> Decision {
-    fail(TermDesc::Neg(List::new()), rules)
+/// Recursively collects cases for a Switch node.
+///
+/// This is based on the `collect` function as found in the Moscow ML compiler.
+fn collect(
+    root_acc: &Access,
+    cases: List<(Con, Decision)>,
+    decision: Decision,
+) -> (List<(Con, Decision)>, Decision) {
+    match decision {
+        Decision::IfEq(acc, con, ok, fail) if root_acc == &acc => {
+            let (cases, dec) = collect(root_acc, cases, *fail);
+
+            // We add our case _after_ recursing, ensuring the order of values
+            // in the list is the same as the order of matches. If we were to
+            // add _before_ recursing, the list would be in reverse order.
+            (cases.add((con, *ok)), dec)
+        }
+        _ => (cases, decision),
+    }
+}
+
+/// Replacing a series of nested IfEq nodes for the same access object with a
+/// Switch node.
+pub fn switchify(tree: Decision) -> Decision {
+    match tree {
+        Decision::IfEq(acc, con, ok, fail) => {
+            let (cases, fallback) = collect(&acc, List::new(), *fail);
+
+            if cases.is_empty() {
+                Decision::IfEq(acc, con, ok, Box::new(fallback))
+            } else {
+                Decision::Switch(acc, cases.add((con, *ok)), Box::new(fallback))
+            }
+        }
+        _ => tree,
+    }
+}
+
+/// Compiles a list of rules into a decision tree.
+pub fn compile(rules: List<(Pattern, RHS)>) -> (Decision, Diagnostics) {
+    let mut diags =
+        Diagnostics { messages: Vec::new(), reachable: HashSet::new() };
+
+    (fail(TermDesc::Neg(List::new()), rules, &mut diags), diags)
 }
 
 #[cfg(test)]
@@ -539,12 +708,20 @@ mod tests {
         Pattern::Cons(con("nil", 0, 1), List::new())
     }
 
+    fn tt_con() -> Con {
+        con("true", 0, 2)
+    }
+
+    fn ff_con() -> Con {
+        con("false", 0, 2)
+    }
+
     fn tt() -> Pattern {
-        Pattern::Cons(con("true", 0, 2), List::new())
+        Pattern::Cons(tt_con(), List::new())
     }
 
     fn ff() -> Pattern {
-        Pattern::Cons(con("false", 0, 2), List::new())
+        Pattern::Cons(ff_con(), List::new())
     }
 
     fn pair(a: Pattern, b: Pattern) -> Pattern {
@@ -557,6 +734,14 @@ mod tests {
 
     fn if_eq(acc: Access, con: Con, ok: Decision, fail: Decision) -> Decision {
         Decision::IfEq(acc, con, Box::new(ok), Box::new(fail))
+    }
+
+    fn switch(
+        acc: Access,
+        cases: List<(Con, Decision)>,
+        fallback: Decision,
+    ) -> Decision {
+        Decision::Switch(acc, cases, Box::new(fallback))
     }
 
     fn success(value: &str) -> Decision {
@@ -622,6 +807,19 @@ mod tests {
     }
 
     #[test]
+    fn test_term_desc_error_string() {
+        let term = TermDesc::Pos(
+            con("box", 2, 1),
+            list![
+                TermDesc::Pos(con("true", 0, 2), List::new()),
+                TermDesc::Neg(list![con("false", 0, 2)])
+            ],
+        );
+
+        assert_eq!(term.error_string(), "box(true, _)");
+    }
+
+    #[test]
     fn test_tabulate() {
         let vals = tabulate(3, |v| v);
 
@@ -672,38 +870,39 @@ mod tests {
 
     #[test]
     fn test_match_always_succeeds() {
-        let result = compile(list![(nil(), rhs("true"))]);
+        let (result, _) = compile(list![(nil(), rhs("true"))]);
 
         assert_eq!(result, success("true"));
     }
 
     #[test]
     fn test_match_always_fails() {
-        let result = compile(List::new());
+        let (result, _) = compile(List::new());
 
         assert_eq!(result, failure());
     }
 
     #[test]
     fn test_match_single_pattern() {
-        let result = compile(list![(tt(), rhs("true")), (ff(), rhs("false")),]);
+        let (result, _) =
+            compile(list![(tt(), rhs("true")), (ff(), rhs("false")),]);
 
         assert_eq!(
             result,
-            if_eq(obj(), con("true", 0, 2), success("true"), success("false"))
+            if_eq(obj(), tt_con(), success("true"), success("false"))
         );
     }
 
     #[test]
     fn test_match_var() {
-        let result = compile(list![(var("a"), rhs("true"))]);
+        let (result, _) = compile(list![(var("a"), rhs("true"))]);
 
         assert_eq!(result, success("true"));
     }
 
     #[test]
     fn test_match_multiple_patterns() {
-        let result = compile(list![
+        let (result, diags) = compile(list![
             (tt(), rhs("true")),
             (ff(), rhs("false")),
             (tt(), rhs("redundant"))
@@ -715,24 +914,26 @@ mod tests {
         // are redundant.
         assert_eq!(
             result,
-            if_eq(obj(), con("true", 0, 2), success("true"), success("false"))
+            if_eq(obj(), tt_con(), success("true"), success("false"))
         );
+
+        assert!(diags.reachable.contains(&"true".to_string()));
+        assert!(diags.reachable.contains(&"false".to_string()));
+        assert!(!diags.reachable.contains(&"redundant".to_string()));
     }
 
     #[test]
-    fn test_inexhaustive_match() {
-        let result = compile(list![(tt(), rhs("true")),]);
+    fn test_nonexhaustive_match() {
+        let (result, diags) = compile(list![(tt(), rhs("true")),]);
 
-        assert_eq!(
-            result,
-            if_eq(obj(), con("true", 0, 2), success("true"), failure())
-        );
+        assert_eq!(result, if_eq(obj(), tt_con(), success("true"), failure()));
+        assert_eq!(diags.messages, vec!["Missing pattern: _".to_string()]);
     }
 
     #[test]
-    fn test_inexhaustive_match_from_paper() {
+    fn test_nonexhaustive_match_from_paper() {
         let green = Pattern::Cons(con("green", 0, 3), List::new());
-        let result = compile(list![
+        let (result, diags) = compile(list![
             (pair(tt(), green.clone()), rhs("111")),
             (pair(ff(), green.clone()), rhs("222")),
         ]);
@@ -741,7 +942,7 @@ mod tests {
             result,
             if_eq(
                 sel(0, obj()),
-                con("true", 0, 2),
+                tt_con(),
                 if_eq(
                     sel(1, obj()),
                     con("green", 0, 3),
@@ -756,11 +957,19 @@ mod tests {
                 )
             )
         );
+
+        assert_eq!(
+            diags.messages,
+            vec![
+                "Missing pattern: pair(true, _)".to_string(),
+                "Missing pattern: pair(false, _)".to_string()
+            ]
+        );
     }
 
     #[test]
     fn test_nested_match() {
-        let result = compile(list![
+        let (result, _) = compile(list![
             (pair(tt(), tt()), rhs("foo")),
             (pair(tt(), ff()), rhs("bar")),
             (pair(ff(), ff()), rhs("baz")),
@@ -771,19 +980,58 @@ mod tests {
             result,
             if_eq(
                 sel(0, obj()),
-                con("true", 0, 2),
-                if_eq(
-                    sel(1, obj()),
-                    con("true", 0, 2),
-                    success("foo"),
-                    success("bar")
-                ),
-                if_eq(
-                    sel(1, obj()),
-                    con("false", 0, 2),
-                    success("baz"),
-                    success("quix")
-                )
+                tt_con(),
+                if_eq(sel(1, obj()), tt_con(), success("foo"), success("bar")),
+                if_eq(sel(1, obj()), ff_con(), success("baz"), success("quix"))
+            )
+        );
+    }
+
+    #[test]
+    fn test_match_with_switchify() {
+        let a = con("a", 0, 4);
+        let b = con("b", 0, 4);
+        let c = con("c", 0, 4);
+        let d = con("d", 0, 4);
+        let a_pat = Pattern::Cons(a.clone(), List::new());
+        let b_pat = Pattern::Cons(b.clone(), List::new());
+        let c_pat = Pattern::Cons(c.clone(), List::new());
+        let d_pat = Pattern::Cons(d.clone(), List::new());
+        let (result, _) = compile(list![
+            ((a_pat, rhs("a"))),
+            ((b_pat, rhs("b"))),
+            ((c_pat, rhs("c"))),
+            ((d_pat, rhs("d")))
+        ]);
+
+        assert_eq!(
+            switchify(result),
+            switch(
+                obj(),
+                list![(a, success("a")), (b, success("b")), (c, success("c"))],
+                success("d")
+            )
+        );
+    }
+
+    #[test]
+    fn test_nested_match_without_switch() {
+        let (result, _) = compile(list![
+            (pair(tt(), tt()), rhs("foo")),
+            (pair(tt(), ff()), rhs("bar")),
+            (pair(ff(), ff()), rhs("baz")),
+            (pair(ff(), tt()), rhs("quix")),
+        ]);
+
+        // This doesn't produce a switch, as the nested patterns don't test the
+        // same value.
+        assert_eq!(
+            switchify(result),
+            if_eq(
+                sel(0, obj()),
+                tt_con(),
+                if_eq(sel(1, obj()), tt_con(), success("foo"), success("bar")),
+                if_eq(sel(1, obj()), ff_con(), success("baz"), success("quix"))
             )
         );
     }
