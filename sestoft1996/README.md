@@ -14,12 +14,13 @@ especially combined with operators (e.g is `foo bar :: baz` parsed as
 `foo(bar :: baz)` or `(foo bar) :: baz`?).
 
 It doesn't help that the paper makes references to the author's implementation,
-but the only two links regarding it are dead FTP links. I eventually found three
+but the only two links regarding it are dead FTP links. I eventually found these
 implementations of this algorithm:
 
 - https://github.com/kfl/mosml/blob/f529b33bb891ff1df4aab198edad376f9ff64d28/src/compiler/Match.sml
 - https://github.com/rsdn/nemerle/blob/db4bc9078f1b6238da32df1519c1957e74b6834a/ncc/typing/DecisionTreeBuilder.n
 - https://github.com/rsdn/nitra/tree/master/Nitra/Nitra.Compiler/Generation/PatternMatching
+- https://github.com/melsman/mlkit/blob/237be62778985e76f912cefdc0bb21b22bed5bd4/src/Compiler/Lambda/CompileDec.sml#L510
 
 The Moscow ML implementation uses memoization and some extensions for the
 pattern matching logic. The Nemerle implementation is quite different and uses a
