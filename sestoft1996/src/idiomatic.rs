@@ -122,7 +122,7 @@ impl Compiler {
             let ctx = Context::new();
             let work = Vec::new();
 
-            self.matches(pat, Access::Obj, term, ctx, work, rhs)
+            self.match_pattern(pat, Access::Root, term, ctx, work, rhs)
         } else {
             self.diagnostics
                 .messages
@@ -143,7 +143,7 @@ impl Compiler {
                 (pats.pop(), accs.pop(), terms.pop())
             {
                 work.push((pats, accs, terms));
-                self.matches(pat, acc, term, ctx, work, rhs)
+                self.match_pattern(pat, acc, term, ctx, work, rhs)
             } else {
                 if let Some((con, mut args)) = ctx.pop() {
                     args.reverse();
@@ -158,7 +158,7 @@ impl Compiler {
         }
     }
 
-    fn matches(
+    fn match_pattern(
         &mut self,
         pattern: Pattern,
         access: Access,
@@ -176,14 +176,14 @@ impl Compiler {
                 .match_term(&con, &term)
             {
                 Match::Yes => {
-                    self.build_match(con, args, access, term, ctx, work, rhs)
+                    self.matched(con, args, access, term, ctx, work, rhs)
                 }
                 Match::No => self.fail(ctx.reconstruct_term(term, &work)),
                 Match::Maybe => {
                     let false_term =
                         ctx.reconstruct_term(term.clone().negated(&con), &work);
                     let cursor = self.rules_index;
-                    let matched = self.build_match(
+                    let matched = self.matched(
                         con.clone(),
                         args,
                         access.clone(),
@@ -206,7 +206,7 @@ impl Compiler {
         }
     }
 
-    fn build_match(
+    fn matched(
         &mut self,
         con: Constructor,
         args: Vec<Pattern>,
@@ -218,7 +218,7 @@ impl Compiler {
     ) -> Decision {
         let access = (0..con.arity)
             .rev()
-            .map(|i| Access::Sel(i, Box::new(obj.clone())))
+            .map(|i| Access::Select(i, Box::new(obj.clone())))
             .collect();
 
         let terms = match term {
@@ -233,7 +233,7 @@ impl Compiler {
 
     fn match_term(&mut self, con: &Constructor, term: &Term) -> Match {
         match term {
-            Term::Pos(scon, _) if con == scon => Match::Yes,
+            Term::Pos(tcon, _) if con == tcon => Match::Yes,
             Term::Pos(_, _) => Match::No,
             Term::Neg(exl) if exl.contains(con) => Match::No,
             Term::Neg(exl) if con.span == (exl.len() + 1) => Match::Yes,
@@ -359,8 +359,8 @@ impl Term {
 /// The `access` type in the paper.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Access {
-    Obj,
-    Sel(usize, Box<Access>),
+    Root,
+    Select(usize, Box<Access>),
 }
 
 /// The `decision` type in the paper.
@@ -479,11 +479,11 @@ mod tests {
     }
 
     fn obj() -> Access {
-        Access::Obj
+        Access::Root
     }
 
     fn sel(index: usize, acc: Access) -> Access {
-        Access::Sel(index, Box::new(acc))
+        Access::Select(index, Box::new(acc))
     }
 
     fn compile(rules: Vec<(Pattern, RHS)>) -> (Decision, Diagnostics) {
