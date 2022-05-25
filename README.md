@@ -34,6 +34,8 @@ Other papers I've come across (but don't necessarily want to implement):
   hieroglyphs (like me), this paper is basically impossible to understand.
   - See also https://alan-j-hu.github.io/writing/pattern-matching.html and
     https://obscurecolin.github.io/compiling-pattern-matching/
+  - There's a [Rust implementation](https://github.com/SomewhatML/match-compile)
+    of this algorithm, though it doesn't perform exhaustiveness checking.
 - [Warnings for pattern
   matching](http://pauillac.inria.fr/~maranget/papers/warn/warn.pdf). This is
   just about producing warnings/errors for e.g. non-exhaustive patterns.
