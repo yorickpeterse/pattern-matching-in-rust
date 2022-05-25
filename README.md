@@ -32,6 +32,8 @@ Other papers I've come across (but don't necessarily want to implement):
   This is about just compiling pattern matching into a decision tree, not about
   exhaustiveness checking. If you don't know how to read the computer science
   hieroglyphs (like me), this paper is basically impossible to understand.
+  - See also https://alan-j-hu.github.io/writing/pattern-matching.html and
+    https://obscurecolin.github.io/compiling-pattern-matching/
 - [Warnings for pattern
   matching](http://pauillac.inria.fr/~maranget/papers/warn/warn.pdf). This is
   just about producing warnings/errors for e.g. non-exhaustive patterns.
