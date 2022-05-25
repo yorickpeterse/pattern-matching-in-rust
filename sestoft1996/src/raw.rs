@@ -139,7 +139,7 @@ pub struct Diagnostics {
     messages: Vec<String>,
 
     /// The right-hand values (= the code you'd run upon a match) that have been
-    /// processes.
+    /// processed.
     ///
     /// If a value isn't included in this set it means it and its pattern are
     /// redundant.
@@ -187,7 +187,7 @@ pub enum Pattern {
 }
 
 /// The `termd` type from the paper.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum TermDesc {
     // `Cons` is the top-most constructor, and its components are described by
     // the Vec.
@@ -470,10 +470,8 @@ fn builddsc(ctx: Context, dsc: TermDesc, work: Work) -> TermDesc {
         // ran into exactly that bug, and it took me a few hours to figure out.
         // And this is why functions with arguments should use parentheses and
         // commas :)
-        let new_dsc = TermDesc::Pos(
-            con.clone(),
-            args.rev().merge(dargs.add(dsc.clone())),
-        );
+        let new_dsc =
+            TermDesc::Pos(con.clone(), args.rev().merge(dargs.add(dsc)));
 
         builddsc(rest, new_dsc, workr)
     } else {
@@ -612,7 +610,7 @@ fn matches(
                         dsc.clone(),
                         ctx.clone(),
                         work.clone(),
-                        rhs.clone(),
+                        rhs,
                         rules.clone(),
                         diags,
                     )),
@@ -688,17 +686,17 @@ mod tests {
     /// When creating a list using this macro, the values are added to the end
     /// of the list.
     macro_rules! list {
-    ($($value: expr),*$(,)?) => {{
-        let temp = vec![$($value),*];
-        let mut list = List::new();
+        ($($value: expr),*$(,)?) => {{
+            let temp = vec![$($value),*];
+            let mut list = List::new();
 
-        for val in temp.into_iter().rev() {
-            list = list.add(val);
-        }
+            for val in temp.into_iter().rev() {
+                list = list.add(val);
+            }
 
-        list
-    }}
-}
+            list
+        }}
+    }
 
     fn con(name: &str, arity: usize, span: usize) -> Con {
         Con { name: name.to_string(), arity, span }
@@ -865,6 +863,67 @@ mod tests {
         assert_eq!(
             args.iter().collect::<Vec<_>>(),
             vec![&sel(0, sel(42, obj())), &sel(1, sel(42, obj()))]
+        );
+    }
+
+    #[test]
+    fn test_builddsc() {
+        let ctx = list![(
+            con("baz", 0, 1),
+            list![
+                TermDesc::Neg(list![con("arg1", 0, 1)]),
+                TermDesc::Neg(list![con("arg2", 0, 1)]),
+            ]
+        )];
+        let work = list![(
+            List::new(),
+            List::new(),
+            list![
+                TermDesc::Neg(list![con("work1", 0, 1)]),
+                TermDesc::Neg(list![con("work2", 0, 1)])
+            ]
+        )];
+        let dsc = TermDesc::Neg(list![con("bar", 0, 1)]);
+        let new_dsc = builddsc(ctx, dsc, work);
+
+        assert_eq!(
+            new_dsc,
+            TermDesc::Pos(
+                con("baz", 0, 1),
+                list![
+                    TermDesc::Neg(list![con("arg2", 0, 1)]),
+                    TermDesc::Neg(list![con("arg1", 0, 1)]),
+                    TermDesc::Neg(list![con("bar", 0, 1)]),
+                    TermDesc::Neg(list![con("work1", 0, 1)]),
+                    TermDesc::Neg(list![con("work2", 0, 1)]),
+                ]
+            )
+        );
+    }
+
+    #[test]
+    fn test_augment() {
+        let ctx = list![(
+            con("baz", 0, 1),
+            list![
+                TermDesc::Neg(list![con("arg1", 0, 1)]),
+                TermDesc::Neg(list![con("arg2", 0, 1)]),
+            ]
+        )];
+
+        let dsc = TermDesc::Neg(list![con("bar", 0, 1)]);
+        let new_ctx = augment(ctx, dsc);
+
+        assert_eq!(
+            new_ctx,
+            list![(
+                con("baz", 0, 1),
+                list![
+                    TermDesc::Neg(list![con("bar", 0, 1)]),
+                    TermDesc::Neg(list![con("arg1", 0, 1)]),
+                    TermDesc::Neg(list![con("arg2", 0, 1)]),
+                ]
+            )]
         );
     }
 

@@ -72,4 +72,21 @@ Some differences from the paper:
 
 ### The idiomatic version
 
-TODO: write this when I actually implement it :)
+This implementation of the algorithm is closer to what you'd normally write in
+Rust. Some of the names used are still a bit confusing, but unfortunately I
+haven't been able to come up with better names.
+
+Unlike the raw implementation, this implementation doesn't rely on persistent
+lists. Instead, it uses mutable vectors that store values in reverse order.
+Storing them in this order means a pop() returns the head of the vector, instead
+of the tail. This makes retrieving the head cheap, as no values need to be
+shifted.
+
+Some function (e.g. `addneg` and `match_fail`) are inlined into their callers,
+as they are only called in one place.
+
+For traversing all the pattern matching rules we use a cursor, essentially
+turning the list into an iterator that you can rewind. This is needed because
+when building an `IfEq` node, both the true and false bodies need to start off
+with the same set of rules. Using a cursor allows us to do just that, but
+without cloning the rules.
