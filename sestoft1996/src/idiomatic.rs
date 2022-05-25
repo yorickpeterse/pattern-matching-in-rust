@@ -693,7 +693,7 @@ mod tests {
     }
 
     #[test]
-    fn test_match_with_replace_nested_if() {
+    fn test_match_with_switch() {
         let a = con("a", 0, 4);
         let b = con("b", 0, 4);
         let c = con("c", 0, 4);
