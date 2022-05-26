@@ -168,9 +168,14 @@ impl Compiler {
         rhs: RHS,
     ) -> Decision {
         match pattern {
-            Pattern::Variable(_) => {
+            Pattern::Variable(name) => {
                 ctx.add_argument_to_last(term);
-                self.succeed(ctx, work, rhs)
+
+                Decision::Variable(
+                    access,
+                    name,
+                    Box::new(self.succeed(ctx, work, rhs)),
+                )
             }
             Pattern::Constructor(con, args) => match self
                 .match_term(&con, &term)
@@ -378,6 +383,10 @@ pub enum Decision {
     /// Checks if any of the given constructors match the value at the given
     /// access path.
     Switch(Access, Vec<(Constructor, Decision)>, Box<Decision>),
+
+    /// Bind a value to a variable, then continue matching the rest of the
+    /// input.
+    Variable(Access, String, Box<Decision>),
 }
 
 impl Decision {
@@ -464,6 +473,10 @@ mod tests {
         fallback: Decision,
     ) -> Decision {
         Decision::Switch(acc, cases, Box::new(fallback))
+    }
+
+    fn bind(access: Access, name: &str, rest: Decision) -> Decision {
+        Decision::Variable(access, name.to_string(), Box::new(rest))
     }
 
     fn success(value: &str) -> Decision {
@@ -602,7 +615,17 @@ mod tests {
     fn test_match_var() {
         let (result, _) = compile(vec![(var("a"), rhs("true"))]);
 
-        assert_eq!(result, success("true"));
+        assert_eq!(result, bind(obj(), "a", success("true")));
+    }
+
+    #[test]
+    fn test_match_nested_var() {
+        let (result, _) = compile(vec![(pair(var("a"), var("b")), rhs("foo"))]);
+
+        assert_eq!(
+            result,
+            bind(sel(0, obj()), "a", bind(sel(1, obj()), "b", success("foo")))
+        );
     }
 
     #[test]
@@ -767,13 +790,13 @@ mod tests {
                             sel(2, obj()),
                             ff_con(),
                             success("foo"),
-                            success("bar")
+                            bind(obj(), "x", success("bar")),
                         ),
-                        success("bar")
+                        bind(obj(), "x", success("bar")),
                     ),
-                    success("bar")
+                    bind(obj(), "x", success("bar")),
                 ),
-                success("bar")
+                bind(obj(), "x", success("bar")),
             )
         );
     }
