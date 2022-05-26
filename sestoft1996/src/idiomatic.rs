@@ -814,6 +814,20 @@ mod tests {
     }
 
     #[test]
+    fn test_match_with_infinite_span() {
+        let (result, diag) = compile(vec![(
+            Pattern::Constructor(con("int", 0, 0), Vec::new()),
+            rhs("foo"),
+        )]);
+
+        assert_eq!(
+            result,
+            if_eq(obj(), con("int", 0, 0), success("foo"), failure())
+        );
+        assert_eq!(diag.messages, vec!["Missing pattern: _"]);
+    }
+
+    #[test]
     fn test_match_nonexhaustive_with_args() {
         let some = con("some", 3, 2);
         let (result, diags) = compile(vec![(
