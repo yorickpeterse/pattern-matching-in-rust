@@ -170,13 +170,20 @@ impl Compiler {
         match pattern {
             Pattern::Variable(name) => {
                 ctx.add_argument_to_last(term);
-
                 Decision::Variable(
                     access,
                     name,
                     Box::new(self.succeed(ctx, work, rhs)),
                 )
             }
+            Pattern::Field(id, pat) => self.match_pattern(
+                *pat,
+                Access::Select(id, Box::new(access)),
+                term,
+                ctx,
+                work,
+                rhs,
+            ),
             Pattern::Wildcard => {
                 ctx.add_argument_to_last(term);
                 self.succeed(ctx, work, rhs)
@@ -298,6 +305,7 @@ pub struct Constructor {
 pub enum Pattern {
     Constructor(Constructor, Vec<Pattern>),
     Variable(String),
+    Field(usize, Box<Pattern>),
     Wildcard,
 }
 
@@ -621,6 +629,24 @@ mod tests {
         let (result, _) = compile(vec![(var("a"), rhs("true"))]);
 
         assert_eq!(result, bind(obj(), "a", success("true")));
+    }
+
+    #[test]
+    fn test_match_field() {
+        let (result, _) = compile(vec![
+            (Pattern::Field(42, Box::new(tt())), rhs("foo")),
+            (Pattern::Field(42, Box::new(var("a"))), rhs("bar")),
+        ]);
+
+        assert_eq!(
+            result,
+            if_eq(
+                sel(42, obj()),
+                tt_con(),
+                success("foo"),
+                bind(sel(42, obj()), "a", success("bar"))
+            )
+        );
     }
 
     #[test]
