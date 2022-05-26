@@ -177,6 +177,10 @@ impl Compiler {
                     Box::new(self.succeed(ctx, work, rhs)),
                 )
             }
+            Pattern::Wildcard => {
+                ctx.add_argument_to_last(term);
+                self.succeed(ctx, work, rhs)
+            }
             Pattern::Constructor(con, args) => match self
                 .match_term(&con, &term)
             {
@@ -294,6 +298,7 @@ pub struct Constructor {
 pub enum Pattern {
     Constructor(Constructor, Vec<Pattern>),
     Variable(String),
+    Wildcard,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -616,6 +621,13 @@ mod tests {
         let (result, _) = compile(vec![(var("a"), rhs("true"))]);
 
         assert_eq!(result, bind(obj(), "a", success("true")));
+    }
+
+    #[test]
+    fn test_match_wildcard() {
+        let (result, _) = compile(vec![(Pattern::Wildcard, rhs("true"))]);
+
+        assert_eq!(result, success("true"));
     }
 
     #[test]
