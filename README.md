@@ -18,7 +18,8 @@ pattern matching/exhaustiveness.
 
 | Name                                          | Paper                        | Directory
 |:----------------------------------------------|:-----------------------------|:-----------
-| ML pattern compilation and partial evaluation | [PDF](https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.48.1363) | [sestoft1996](./sestoft1996/) |
+| ML pattern compilation and partial evaluation | [PDF](https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.48.1363) | [sestoft1996](./sestoft1996/)
+| How to compile pattern matching               | [PDF](https://julesjacobs.com/notes/patternmatching/patternmatching.pdf) | [jacobs2021](./jacobs2021/)
 
 Other papers I've come across (but don't necessarily want to implement):
 
@@ -43,13 +44,6 @@ Other papers I've come across (but don't necessarily want to implement):
 - [The Implementation of Functional Programming
   Languages](https://www.microsoft.com/en-us/research/publication/the-implementation-of-functional-programming-languages/).
   This book has a chapter on pattern matching, but I gave up on it.
-- [How to compile pattern
-  matching](https://julesjacobs.com/notes/patternmatching/patternmatching.pdf)
-  provides an algorithm somewhat different from the existing literature.
-  Unfortunately, the provided Scala implementation doesn't do proper
-  exhaustiveness checking. I contacted the author and while they did provide a
-  version that did some degree of exhaustiveness checking, I never managed to
-  properly understand it or the algorithm as a whole.
 
 ## Requirements
 
