@@ -34,7 +34,7 @@ Other papers I've come across (but don't necessarily want to implement):
   exhaustiveness checking. If you don't know how to read the computer science
   hieroglyphs (like me), this paper is basically impossible to understand.
   - See also https://alan-j-hu.github.io/writing/pattern-matching.html and
-    https://obscurecolin.github.io/compiling-pattern-matching/
+    https://contificate.github.io/compiling-pattern-matching/
   - There's a [Rust implementation](https://github.com/SomewhatML/match-compile)
     of this algorithm, though it doesn't perform exhaustiveness checking.
 - [Warnings for pattern
