@@ -1,0 +1,48 @@
+---
+name: Test
+on: push
+
+env:
+  CARGO_HOME: ${{ github.workspace }}/.cargo
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: 'rust:alpine'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            .cargo
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run tests
+        run: cargo test
+
+  rustfmt:
+    runs-on: ubuntu-latest
+    container:
+      image: 'rust:alpine'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            .cargo
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Set up rustfmt
+        run: rustup component add rustfmt
+
+      - name: Check formatting
+        run: 'cargo fmt --all --check'
