@@ -48,7 +48,7 @@ pub enum Pattern {
     /// A pattern such as `Some(42)`.
     Constructor(Constructor, Vec<Pattern>),
     Int(i64),
-    Variable(String),
+    Binding(String),
     Or(Vec<Pattern>),
     Range(i64, i64),
 }
@@ -599,7 +599,7 @@ impl Compiler {
         let mut bindings = row.body.bindings;
 
         for col in &row.columns {
-            if let Pattern::Variable(bind) = &col.pattern {
+            if let Pattern::Binding(bind) = &col.pattern {
                 bindings.push((bind.clone(), col.variable));
             }
         }
@@ -607,7 +607,7 @@ impl Compiler {
         let columns = row
             .columns
             .into_iter()
-            .filter(|col| !matches!(col.pattern, Pattern::Variable(_)))
+            .filter(|col| !matches!(col.pattern, Pattern::Binding(_)))
             .collect();
 
         Row {
@@ -683,7 +683,7 @@ mod tests {
     }
 
     fn bind(name: &str) -> Pattern {
-        Pattern::Variable(name.to_string())
+        Pattern::Binding(name.to_string())
     }
 
     fn variant(typ: TypeId, index: usize, args: Vec<Pattern>) -> Pattern {
