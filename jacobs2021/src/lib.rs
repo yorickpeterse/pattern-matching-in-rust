@@ -408,7 +408,7 @@ impl Compiler {
             };
         }
 
-        let branch_var = self.branch_variable(&rows[0], &rows);
+        let branch_var = self.branch_variable(&rows);
 
         match self.variable_type(branch_var).clone() {
             Type::Int => {
@@ -619,7 +619,7 @@ impl Compiler {
 
     /// Given a row, returns the variable in that row that's referred to the
     /// most across all rows.
-    fn branch_variable(&self, row: &Row, rows: &[Row]) -> Variable {
+    fn branch_variable(&self, rows: &[Row]) -> Variable {
         let mut counts = HashMap::new();
 
         for row in rows {
@@ -628,7 +628,8 @@ impl Compiler {
             }
         }
 
-        row.columns
+        rows[0]
+            .columns
             .iter()
             .map(|col| col.variable)
             .max_by_key(|var| counts[var])
@@ -824,7 +825,7 @@ mod tests {
             Row::new(vec![Column::new(var2, Pattern::Int(4))], None, rhs(2)),
         ];
 
-        let branch = compiler.branch_variable(&rows[0], &rows);
+        let branch = compiler.branch_variable(&rows);
 
         assert_eq!(branch, var2);
     }
