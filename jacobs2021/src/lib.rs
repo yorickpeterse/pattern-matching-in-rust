@@ -302,7 +302,7 @@ impl Match {
                 missing.insert(name);
             }
             Decision::Guard(_, _, fallback) => {
-                self.add_missing_patterns(&*fallback, terms, missing);
+                self.add_missing_patterns(fallback, terms, missing);
             }
             Decision::Switch(var, cases, fallback) => {
                 for case in cases {
@@ -346,7 +346,7 @@ impl Match {
                 }
 
                 if let Some(node) = fallback {
-                    self.add_missing_patterns(&*node, terms, missing);
+                    self.add_missing_patterns(node, terms, missing);
                 }
             }
         }
