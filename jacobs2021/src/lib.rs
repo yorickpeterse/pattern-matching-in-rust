@@ -377,17 +377,16 @@ impl Compiler {
         }
     }
 
-    fn compile_rows(&mut self, rows: Vec<Row>) -> Decision {
+    fn compile_rows(&mut self, mut rows: Vec<Row>) -> Decision {
         if rows.is_empty() {
             self.diagnostics.missing = true;
 
             return Decision::Failure;
         }
 
-        let mut rows = rows
-            .into_iter()
-            .map(|row| self.move_variable_patterns(row))
-            .collect::<Vec<_>>();
+        for row in &mut rows {
+            self.move_variable_patterns(row);
+        }
 
         // There may be multiple rows, but if the first one has no patterns
         // those extra rows are redundant, as a row without columns/patterns
@@ -595,26 +594,15 @@ impl Compiler {
     ///
     /// Where `it` is a variable holding the value `case foo` is compared
     /// against, and the case/row has no patterns (i.e. always matches).
-    fn move_variable_patterns(&self, row: Row) -> Row {
-        let mut bindings = row.body.bindings;
-
-        for col in &row.columns {
+    fn move_variable_patterns(&self, row: &mut Row) {
+        row.columns.retain(|col| {
             if let Pattern::Binding(bind) = &col.pattern {
-                bindings.push((bind.clone(), col.variable));
+                row.body.bindings.push((bind.clone(), col.variable));
+                false
+            } else {
+                true
             }
-        }
-
-        let columns = row
-            .columns
-            .into_iter()
-            .filter(|col| !matches!(col.pattern, Pattern::Binding(_)))
-            .collect();
-
-        Row {
-            columns,
-            guard: row.guard,
-            body: Body { bindings, value: row.body.value },
-        }
+        });
     }
 
     /// Given a row, returns the variable in that row that's referred to the
@@ -755,7 +743,7 @@ mod tests {
         let var1 = compiler.new_variable(typ);
         let var2 = compiler.new_variable(typ);
         let cons = Constructor::True;
-        let case = compiler.move_variable_patterns(Row {
+        let mut row = Row {
             columns: vec![
                 Column::new(var2, bind("a")),
                 Column::new(
@@ -765,10 +753,12 @@ mod tests {
             ],
             guard: None,
             body: Body { bindings: Vec::new(), value: 42 },
-        });
+        };
+
+        compiler.move_variable_patterns(&mut row);
 
         assert_eq!(
-            case,
+            row,
             Row {
                 columns: vec![Column::new(
                     var1,
@@ -788,14 +778,16 @@ mod tests {
         let mut compiler = Compiler::new();
         let typ = new_type(&mut compiler, Type::Boolean);
         let var1 = compiler.new_variable(typ);
-        let case = compiler.move_variable_patterns(Row {
+        let mut row = Row {
             columns: vec![Column::new(var1, bind("a"))],
             guard: None,
             body: Body { bindings: Vec::new(), value: 42 },
-        });
+        };
+
+        compiler.move_variable_patterns(&mut row);
 
         assert_eq!(
-            case,
+            row,
             Row {
                 columns: Vec::new(),
                 guard: None,
