@@ -164,35 +164,16 @@ code and corresponding tests.
 
 ## OR patterns
 
-OR patterns are not covered in the article, but supporting them is easy.
-Supporting these requires an extra `flatten_or` function that takes as input a
-pattern and a `Row`, returning an array of `(Pattern, Row)` tuples. If the input
-pattern is an OR pattern, it returns its sub patterns zipped with a copy of the
-input row. If the input pattern is any other pattern, the function just returns
-an array of the input pattern and row:
+OR patterns are not covered in the article. To support these patterns we have to
+take rows containing OR patterns in any columns, then expand those OR patterns
+into separate rows. The code here handles this in the `expand_or_patterns()`
+function. This function is called _before_ pushing variable/wildcard patterns
+out of the rows, ensuring that OR patterns containing these patterns work as
+expected.
 
-```rust
-fn flatten_or(pattern: Pattern, row: Row) -> Vec<(Pattern, Row)> {
-    if let Pattern::Or(args) = pattern {
-        args.into_iter().map(|p| (p, row.clone())).collect()
-    } else {
-        vec![(pattern, row)]
-    }
-}
-```
-
-When removing the branch column from a row you then use this function, instead
-of acting upon a column's pattern directly:
-
-```rust
-if let Some(col) = row.remove_column(&branch_var) {
-    for (pat, row) in flatten_or(col.pattern, row) {
-        ...
-    }
-} else {
-    ...
-}
-```
+**NOTE:** a previous implementation used a `flatten_or` method called, with a
+different implementation. This implementation proved incorrect as it failed to
+handle bindings in OR patterns (e.g. `10 or number`).
 
 ## Range patterns
 

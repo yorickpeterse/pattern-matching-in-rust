@@ -42,6 +42,69 @@ impl Constructor {
     }
 }
 
+/// Expands rows containing OR patterns into individual rows, such that each
+/// branch in the OR produces its own row.
+///
+/// For each column that tests against an OR pattern, each sub pattern is
+/// translated into a new row. This work repeats itself until no more OR
+/// patterns remain in the rows.
+///
+/// The implementation here is probably not as fast as it can be. Instead, it's
+/// optimized for ease of maintenance and readability.
+fn expand_or_patterns(rows: &mut Vec<Row>) {
+    // If none of the rows contain any OR patterns, we can avoid the below work
+    // loop, saving some allocations and time.
+    if !rows
+        .iter()
+        .any(|r| r.columns.iter().any(|c| matches!(c.pattern, Pattern::Or(_))))
+    {
+        return;
+    }
+
+    // The implementation uses two Vecs: the original one, and a temporary one
+    // we push newly created rows into. After processing all rows we swap the
+    // two, repeating this process until we no longer find any OR patterns.
+    let mut new_rows = Vec::with_capacity(rows.len());
+    let mut found = true;
+
+    while found {
+        found = false;
+
+        for row in rows.drain(0..) {
+            // Find the first column containing an OR pattern. We process this
+            // one column at a time, as that's (much) easier to implement
+            // compared to handling all columns at once (as multiple columns may
+            // contain OR patterns).
+            let res = row.columns.iter().enumerate().find_map(|(idx, col)| {
+                if let Pattern::Or(pats) = &col.pattern {
+                    Some((idx, col.variable, pats))
+                } else {
+                    None
+                }
+            });
+
+            if let Some((idx, var, pats)) = res {
+                found = true;
+
+                // This creates a new row for each branch in the OR pattern.
+                // Other columns are left as-is. If such columns contain OR
+                // patterns themselves, we'll expand them in a future iteration
+                // of the surrounding `while` loop.
+                for pat in pats {
+                    let mut new_row = row.clone();
+
+                    new_row.columns[idx] = Column::new(var, pat.clone());
+                    new_rows.push(new_row);
+                }
+            } else {
+                new_rows.push(row);
+            }
+        }
+
+        std::mem::swap(rows, &mut new_rows);
+    }
+}
+
 /// A user defined pattern such as `Some((x, 10))`.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum Pattern {
@@ -51,16 +114,6 @@ pub enum Pattern {
     Binding(String),
     Or(Vec<Pattern>),
     Range(i64, i64),
-}
-
-impl Pattern {
-    fn flatten_or(self, row: Row) -> Vec<(Pattern, Row)> {
-        if let Pattern::Or(args) = self {
-            args.into_iter().map(|p| (p, row.clone())).collect()
-        } else {
-            vec![(self, row)]
-        }
-    }
 }
 
 /// A representation of a type.
@@ -384,6 +437,8 @@ impl Compiler {
             return Decision::Failure;
         }
 
+        expand_or_patterns(&mut rows);
+
         for row in &mut rows {
             self.move_variable_patterns(row);
         }
@@ -479,25 +534,21 @@ impl Compiler {
 
         for mut row in rows {
             if let Some(col) = row.remove_column(&branch_var) {
-                for (pat, row) in col.pattern.flatten_or(row) {
-                    let (key, cons) = match pat {
-                        Pattern::Int(val) => {
-                            ((val, val), Constructor::Int(val))
-                        }
-                        Pattern::Range(start, stop) => {
-                            ((start, stop), Constructor::Range(start, stop))
-                        }
-                        _ => unreachable!(),
-                    };
-
-                    if let Some(index) = tested.get(&key) {
-                        raw_cases[*index].2.push(row);
-                        continue;
+                let (key, cons) = match col.pattern {
+                    Pattern::Int(val) => ((val, val), Constructor::Int(val)),
+                    Pattern::Range(start, stop) => {
+                        ((start, stop), Constructor::Range(start, stop))
                     }
+                    _ => unreachable!(),
+                };
 
-                    tested.insert(key, raw_cases.len());
-                    raw_cases.push((cons, Vec::new(), vec![row]));
+                if let Some(index) = tested.get(&key) {
+                    raw_cases[*index].2.push(row);
+                    continue;
                 }
+
+                tested.insert(key, raw_cases.len());
+                raw_cases.push((cons, Vec::new(), vec![row]));
             } else {
                 fallback_rows.push(row);
             }
@@ -549,19 +600,16 @@ impl Compiler {
     ) -> Vec<Case> {
         for mut row in rows {
             if let Some(col) = row.remove_column(&branch_var) {
-                for (pat, row) in col.pattern.flatten_or(row) {
-                    if let Pattern::Constructor(cons, args) = pat {
-                        let idx = cons.index();
-                        let mut cols = row.columns;
+                if let Pattern::Constructor(cons, args) = col.pattern {
+                    let idx = cons.index();
+                    let mut cols = row.columns;
 
-                        for (var, pat) in
-                            cases[idx].1.iter().zip(args.into_iter())
-                        {
-                            cols.push(Column::new(*var, pat));
-                        }
-
-                        cases[idx].2.push(Row::new(cols, row.guard, row.body));
+                    for (var, pat) in cases[idx].1.iter().zip(args.into_iter())
+                    {
+                        cols.push(Column::new(*var, pat));
                     }
+
+                    cases[idx].2.push(Row::new(cols, row.guard, row.body));
                 }
             } else {
                 for (_, _, rows) in &mut cases {
